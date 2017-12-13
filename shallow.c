@@ -1,4 +1,5 @@
 #include "cache.h"
+#include "repository.h"
 #include "tempfile.h"
 #include "lockfile.h"
 #include "object-store.h"
