@@ -49,8 +49,7 @@ struct alternate_object_database *alloc_alt_odb(const char *dir);
  * Add the directory to the on-disk alternates file; the new entry will also
  * take effect in the current process.
  */
-#define add_to_alternates_file(r, d) add_to_alternates_file_##r(d)
-extern void add_to_alternates_file_the_repository(const char *dir);
+extern void add_to_alternates_file(struct repository *r, const char *dir);
 
 /*
  * Add the directory to the in-memory list of alternates (along with any

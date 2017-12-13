@@ -480,10 +480,10 @@ struct alternate_object_database *alloc_alt_odb(const char *dir)
 	return ent;
 }
 
-void add_to_alternates_file_the_repository(const char *reference)
+void add_to_alternates_file(struct repository *r, const char *reference)
 {
 	struct lock_file lock = LOCK_INIT;
-	char *alts = git_pathdup("objects/info/alternates");
+	char *alts = repo_git_path(r, "objects/info/alternates");
 	FILE *in, *out;
 	int found = 0;
 
@@ -516,8 +516,8 @@ void add_to_alternates_file_the_repository(const char *reference)
 		fprintf_or_die(out, "%s\n", reference);
 		if (commit_lock_file(&lock))
 			die_errno("unable to move new alternates file into place");
-		if (the_repository->objects.alt_odb.tail)
-			link_alt_odb_entries(the_repository, reference,
+		if (r->objects.alt_odb.tail)
+			link_alt_odb_entries(r, reference,
 					     '\n', NULL, 0);
 	}
 	free(alts);
