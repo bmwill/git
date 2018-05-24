@@ -662,7 +662,8 @@ static int git_transport_push(struct transport *transport, struct ref *remote_re
 
 	switch (data->version) {
 	case protocol_v2:
-		die("support for protocol v2 not implemented yet");
+
+		//die("support for protocol v2 not implemented yet");
 		break;
 	case protocol_v1:
 	case protocol_v0:
