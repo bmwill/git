@@ -28,6 +28,7 @@
 #include "object-store.h"
 #include "protocol.h"
 #include "receive-pack.h"
+#include "serve.h"
 
 static const char * const receive_pack_usage[] = {
 	N_("git receive-pack <git-dir>"),
@@ -1988,9 +1989,23 @@ static void receive_pack(int advertise_refs)
 	free((void *)push_cert_nonce);
 }
 
+int receive_pack_v2(struct repository *r, struct argv_array *keys,
+		    struct packet_reader *request)
+{
+	packet_flush(1);
+	return 0;
+}
+
+int receive_pack_advertise(struct repository *r,
+			   struct strbuf *value)
+{
+	return 1;
+}
+
 int cmd_receive_pack(int argc, const char **argv, const char *prefix)
 {
 	int advertise_refs = 0;
+	struct serve_options serve_opts = SERVE_OPTIONS_INIT;
 
 	struct option options[] = {
 		OPT__QUIET(&quiet, N_("quiet")),
@@ -2029,6 +2044,9 @@ int cmd_receive_pack(int argc, const char **argv, const char *prefix)
 		 * push support for protocol v2 has not been implemented yet,
 		 * so ignore the request to use v2 and fallback to using v0.
 		 */
+		serve_opts.advertise_capabilities = advertise_refs;
+		serve_opts.stateless_rpc = stateless_rpc;
+		serve(&serve_opts);
 		break;
 	case protocol_v1:
 		/*

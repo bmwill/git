@@ -10,6 +10,7 @@ test_expect_success 'test capability advertisement' '
 	agent=git/$(git version | cut -d" " -f3)
 	ls-refs
 	fetch=shallow
+	push
 	server-option
 	0000
 	EOF

@@ -7,6 +7,7 @@
 #include "ls-refs.h"
 #include "serve.h"
 #include "upload-pack.h"
+#include "receive-pack.h"
 
 static int always_advertise(struct repository *r,
 			    struct strbuf *value)
@@ -56,6 +57,7 @@ static struct protocol_capability capabilities[] = {
 	{ "agent", agent_advertise, NULL },
 	{ "ls-refs", always_advertise, ls_refs },
 	{ "fetch", upload_pack_advertise, upload_pack_v2 },
+	{ "push", receive_pack_advertise, receive_pack_v2 },
 	{ "server-option", always_advertise, NULL },
 };
 
