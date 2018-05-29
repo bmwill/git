@@ -412,9 +412,10 @@ test_expect_success 'push with http:// and a config of v2 requests v2' '
 
 	# Push to another branch, as the target repository has the
 	# master branch checked out and we cannot push into it.
-	GIT_TRACE_PACKET="$(pwd)/log" git -C http_child -c protocol.version=2 \
+	GIT_TRACE_PACKET="$(pwd)/log" GIT_TRACE_CURL="$(pwd)/log" git -C http_child -c protocol.version=2 \
 		push origin HEAD:client_branch &&
 
+		test_pause &&
 	#git -C http_child log -1 --format=%s >actual &&
 	#git -C "$HTTPD_DOCUMENT_ROOT_PATH/http_parent" log -1 --format=%s client_branch >expect &&
 	#test_cmp expect actual &&

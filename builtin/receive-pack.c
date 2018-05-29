@@ -1989,19 +1989,6 @@ static void receive_pack(int advertise_refs)
 	free((void *)push_cert_nonce);
 }
 
-int receive_pack_v2(struct repository *r, struct argv_array *keys,
-		    struct packet_reader *request)
-{
-	packet_flush(1);
-	return 0;
-}
-
-int receive_pack_advertise(struct repository *r,
-			   struct strbuf *value)
-{
-	return 1;
-}
-
 int cmd_receive_pack(int argc, const char **argv, const char *prefix)
 {
 	int advertise_refs = 0;
@@ -2065,4 +2052,217 @@ int cmd_receive_pack(int argc, const char **argv, const char *prefix)
 	}
 
 	return 0;
+}
+
+/* The following is the implementation of push in v2 */
+
+enum update_type {
+	CREATE,
+	DELETE,
+	UPDATE,
+	//REBASE,
+	//MERGE,
+};
+
+struct update {
+	enum update_type type;
+	char *ref_name;
+	char *old_symref_target;
+	char *new_symref_target;
+	struct object_id old_oid;
+	struct object_id new_oid;
+
+	//struct update_result result;
+};
+
+static void update_init(struct update *u, enum update_type t,
+			const char *ref_name, const char *symref_target,
+			const struct object_id *old_oid,
+			const struct object_id *new_oid)
+{
+	memset(u, 0, sizeof(*u));
+	u->type = t;
+	u->ref_name = xstrdup(ref_name);
+	//u->symref_target = xstrdup_or_null(symref_target);
+	oidcpy(&u->old_oid, old_oid);
+	oidcpy(&u->new_oid, new_oid);
+}
+
+static void update_clear(struct update *u)
+{
+	free(u->ref_name);
+	//free(u->symref_target);
+}
+
+struct update_vec {
+	struct update *entry;
+	int alloc;
+	int nr;
+};
+
+static void update_vec_init(struct update_vec *v)
+{
+	memset(v, 0, sizeof(*v));
+}
+
+static void update_vec_clear(struct update_vec *v)
+{
+	int i;
+	for (i = 0; i < v->nr; i++) {
+		update_clear(&v->entry[i]);
+	}
+	FREE_AND_NULL(v->entry);
+	v->alloc = 0;
+	v->nr = 0;
+}
+
+static void update_vec_append(struct update_vec *v, enum update_type t,
+			      const char *ref_name, const char *symref_target,
+			      const struct object_id *old_oid,
+			      const struct object_id *new_oid)
+{
+	ALLOC_GROW(v->entry, v->nr + 1, v->alloc);
+	update_init(&v->entry[v->nr++], t, ref_name, symref_target, old_oid,
+		    new_oid);
+}
+
+static int parse_update(const char *line, struct update_vec *v)
+{
+	int ret = 1;
+	int i = 0;
+	struct object_id old_oid;
+	struct object_id new_oid;
+	struct string_list line_sections = STRING_LIST_INIT_DUP;
+	const char *refname;
+	const char *arg;
+	enum update_type t;
+	int symref_update = 0;
+
+	oidcpy(&old_oid, &null_oid);
+	oidcpy(&new_oid, &null_oid);
+
+	if (string_list_split(&line_sections, line, ' ', -1) < 3) {
+		ret = 0;
+		goto out;
+	}
+
+	/* determine update type */
+	arg = line_sections.items[i++].string;
+	if (!strcmp(arg, "create")) {
+		t = CREATE;
+	} else if (!strcmp(arg, "delete")) {
+		t = DELETE;
+	} else if (!strcmp(arg, "update")) {
+		t = UPDATE;
+	} else {
+		ret = 0;
+		goto out;
+	}
+
+	/* symref */
+	arg = line_sections.items[i++].string;
+	if (!strcmp(arg, "symref")) {
+		symref_update = 1;
+
+		arg = line_sections.items[i++].string;
+	}
+
+	/* refname */
+	refname = arg;
+
+	//TODO symref stuff
+	switch (t) {
+	case CREATE:
+		arg = line_sections.items[i++].string;
+		if (i < line_sections.nr ||
+		    parse_oid_hex(arg, &new_oid, &arg) || *arg) {
+			ret = 0;
+			goto out;
+		}
+		break;
+	case DELETE:
+		arg = line_sections.items[i++].string;
+		if (i < line_sections.nr ||
+		    parse_oid_hex(arg, &old_oid, &arg) || *arg) {
+			ret = 0;
+			goto out;
+		}
+		break;
+	case UPDATE:
+		arg = line_sections.items[i++].string;
+		if (i < line_sections.nr ||
+		    parse_oid_hex(arg, &new_oid, &arg) || *arg) {
+			ret = 0;
+			goto out;
+		}
+
+		arg = line_sections.items[i++].string;
+		if (i < line_sections.nr ||
+		    parse_oid_hex(arg, &old_oid, &arg) || *arg) {
+			ret = 0;
+			goto out;
+		}
+		break;
+	}
+
+	update_vec_append(v, t, refname, NULL, &old_oid, &new_oid);
+
+out:
+	string_list_clear(&line_sections, 0);
+	return ret;
+}
+
+static void process_ref_updates(struct packet_reader *request) {
+	struct update_vec v;
+	update_vec_init(&v);
+	while (packet_reader_read(request) == PACKET_READ_NORMAL) {
+		const char *arg = request->line;
+		if (parse_update(arg, &v))
+			continue;
+
+		die("unexpected line: '%s'", arg);
+	}
+
+	update_vec_clear(&v);
+}
+
+enum push_state {
+	PUSH_PROCESS_SECTION,
+	PUSH_PROCESS_REF_UPDATES,
+	PUSH_READ_PACK,
+	PUSH_SEND_REPORT,
+	PUSH_DONE,
+};
+
+int receive_pack_v2(struct repository *r, struct argv_array *keys,
+		    struct packet_reader *request)
+{
+	enum push_state state = PUSH_PROCESS_SECTION;
+
+	while (state != PUSH_DONE) {
+		switch (state) {
+		case PUSH_PROCESS_SECTION:
+			break;
+		case PUSH_PROCESS_REF_UPDATES:
+			process_ref_updates(request);
+			break;
+		case PUSH_READ_PACK:
+			state = PUSH_SEND_REPORT;
+			break;
+		case PUSH_SEND_REPORT:
+			packet_flush(1);
+			state = PUSH_DONE;
+			break;
+		case PUSH_DONE:
+			continue;
+		}
+	}
+
+	return 0;
+}
+
+int receive_pack_advertise(struct repository *r,
+			   struct strbuf *value)
+{
+	return 1;
 }
