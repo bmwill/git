@@ -428,6 +428,73 @@ header.
 		2 - progress messages
 		3 - fatal error message just before stream aborts
 
+ push
+~~~~~~
+
+`push` is the command used to push ref-updates and a packfile to a remote
+server in v2.
+
+Additional features not supported in the base command will be advertised
+as the value of the command in the capability advertisement in the form
+of a space separated list of features: "<command>=<feature 1> <feature 2>"
+
+The format of a push request is as follows:
+
+    request = *section
+    section = (ref-updates | packfile)
+	      (delim-pkt | flush-pkt)
+
+    ref-updates = PKT-LINE("ref-updates" LF)
+		  *PKT-Line(txn_id SP action LF)
+
+    action = create | delete | update
+    create = "create" SP refname SP new_oid
+    delete = "delete" SP refname SP old_oid
+    update = "update" SP refname SP old_oid SP new_oid
+    txn_id = 1*DIGIT
+
+    packfile = PKT-LINE("packfile" LF)
+	       *PKT-LINE(*%x00-ff)
+
+    ref-updates section
+	* Transaction id's allow for mapping what was requested to what the
+	  server actually did with the ref-update.
+	* Normal ref-updates require that the old value of a ref is supplied so
+	  that the server can verify that the reference that is being updated
+	  hasn't changed while the request was being processed.
+
+    packfile section
+	* A packfile MAY not be included if only delete commands are used or if
+	  an update only incorperates objects the server already has.
+	* The packfile section follows the ref-updates section.
+
+The server will receive the packfile, unpack it, then validate each ref-update,
+and it will run any update hooks to make sure that the update is acceptable.
+If all of that is fine, the server will then update the references.
+
+The format of a push response is as follows:
+
+    response = *section
+    section = (unpack-error | ref-update-status)
+	      flush-pkt
+
+    unpack-error = PKT-LINE("ERR" SP error-msg LF)
+
+    ref-update-status = *PKT-LINE(txn_id SP result LF)
+    result = created | deleted | updated | error
+    created = "created" SP refname SP new_oid
+    deleted = "deleted" SP refname SP old_oid
+    updated = "updated" SP refname SP old_oid SP new_oid
+    error = "ERR" SP error-msg
+
+    ref-update-status section
+	* This section is always included unless there was an error unpacking
+	  the packfile sent in the request.
+	* The server is given the freedom to do what it wants with the
+	  ref-updates provided in the reqeust.  This means that an update sent
+	  from the server may result in the creation of a ref or rebasing the
+	  update on the server.
+
  server-option
 ~~~~~~~~~~~~~~~
 
