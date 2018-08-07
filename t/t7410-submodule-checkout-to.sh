@@ -35,8 +35,10 @@ test_expect_success 'checkout main' \
     (cd clone/main &&
 	git worktree add "$base_path/default_checkout/main" "$rev1_hash_main")'
 
-test_expect_failure 'can see submodule diffs just after checkout' \
-    '(cd default_checkout/main && git diff --submodule master"^!" | grep "file1 updated")'
+test_expect_success 'can see submodule diffs just after checkout' '
+	git -C default_checkout/main diff --submodule master"^!" >out &&
+	grep "file1 updated" out
+'
 
 test_expect_success 'checkout main and initialize independed clones' \
     'mkdir fully_cloned_submodule &&

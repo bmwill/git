@@ -906,6 +906,21 @@ static int module_name(int argc, const char **argv, const char *prefix)
 	return 0;
 }
 
+static int module_gitdir(int argc, const char **argv, const char *prefix)
+{
+	struct strbuf gitdir = STRBUF_INIT;
+
+	if (argc != 2)
+		usage(_("git submodule--helper gitdir <name>"));
+
+	submodule_name_to_gitdir(&gitdir, the_repository, argv[1]);
+
+	printf("%s\n", gitdir.buf);
+
+	strbuf_release(&gitdir);
+	return 0;
+}
+
 struct sync_cb {
 	const char *prefix;
 	unsigned int flags;
@@ -1268,10 +1283,13 @@ static int add_possible_reference_from_superproject(
 	 * standard layout with .git/(modules/<name>)+/objects
 	 */
 	if (ends_with(alt->path, "/objects")) {
+		struct repository alternate;
 		char *sm_alternate;
 		struct strbuf sb = STRBUF_INIT;
 		struct strbuf err = STRBUF_INIT;
 		strbuf_add(&sb, alt->path, strlen(alt->path) - strlen("objects"));
+
+		repo_init(&alternate, sb.buf, NULL);
 
 		/*
 		 * We need to end the new path with '/' to mark it as a dir,
@@ -1279,7 +1297,10 @@ static int add_possible_reference_from_superproject(
 		 * as the last part of a missing submodule reference would
 		 * be taken as a file name.
 		 */
-		strbuf_addf(&sb, "modules/%s/", sas->submodule_name);
+		strbuf_reset(&sb);
+		submodule_name_to_gitdir(&sb, &alternate, sas->submodule_name);
+		strbuf_addch(&sb, '/');
+		repo_clear(&alternate);
 
 		sm_alternate = compute_alternate_path(sb.buf, &err);
 		if (sm_alternate) {
@@ -1392,7 +1413,7 @@ static int module_clone(int argc, const char **argv, const char *prefix)
 		usage_with_options(git_submodule_helper_usage,
 				   module_clone_options);
 
-	strbuf_addf(&sb, "%s/modules/%s", get_git_dir(), name);
+	submodule_name_to_gitdir(&sb, the_repository, name);
 	sm_gitdir = absolute_pathdup(sb.buf);
 	strbuf_reset(&sb);
 
@@ -2018,7 +2039,7 @@ static int connect_gitdir_workingtree(int argc, const char **argv, const char *p
 	name = argv[1];
 	path = argv[2];
 
-	strbuf_addf(&sb, "%s/modules/%s", get_git_dir(), name);
+	submodule_name_to_gitdir(&sb, the_repository, name);
 	sm_gitdir = absolute_pathdup(sb.buf);
 
 	connect_work_tree_and_git_dir(path, sm_gitdir, 0);
@@ -2040,6 +2061,7 @@ struct cmd_struct {
 static struct cmd_struct commands[] = {
 	{"list", module_list, 0},
 	{"name", module_name, 0},
+	{"gitdir", module_gitdir, 0},
 	{"clone", module_clone, 0},
 	{"update-clone", update_clone, 0},
 	{"connect-gitdir-workingtree", connect_gitdir_workingtree, 0},

@@ -252,12 +252,13 @@ Use -f if you really want to add it." >&2
 		fi
 
 	else
-		if test -d ".git/modules/$sm_name"
+		sm_gitdir="$(git submodule--helper gitdir "$sm_name")"
+		if test -d "$sm_gitdir"
 		then
 			if test -z "$force"
 			then
 				eval_gettextln >&2 "A git directory for '\$sm_name' is found locally with remote(s):"
-				GIT_DIR=".git/modules/$sm_name" GIT_WORK_TREE=. git remote -v | grep '(fetch)' | sed -e s,^,"  ", -e s,' (fetch)',, >&2
+				GIT_DIR="$sm_gitdir" GIT_WORK_TREE=. git remote -v | grep '(fetch)' | sed -e s,^,"  ", -e s,' (fetch)',, >&2
 				die "$(eval_gettextln "\
 If you want to reuse this local git directory instead of cloning again from
   \$realrepo
@@ -577,7 +578,7 @@ cmd_update()
 			die "$(eval_gettext "Unable to find current \${remote_name}/\${branch} revision in submodule path '\$sm_path'")"
 		fi
 
-		if ! $(git config -f "$(git rev-parse --git-common-dir)/modules/$name/config" core.worktree) 2>/dev/null
+		if ! $(git config -f "$(git submodule--helper gitdir "$name")/config" core.worktree) 2>/dev/null
 		then
 			git submodule--helper connect-gitdir-workingtree "$name" "$sm_path"
 		fi
