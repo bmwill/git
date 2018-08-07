@@ -1965,6 +1965,20 @@ cleanup:
 void submodule_name_to_gitdir(struct strbuf *buf, struct repository *r,
 			      const char *submodule_name)
 {
+	size_t modules_len;
+
 	strbuf_git_common_path(buf, r, "modules/");
+	modules_len = buf->len;
 	strbuf_addstr(buf, submodule_name);
+
+	/*
+	 * If the submodule gitdir already exists using the old-fashioned
+	 * location (which uses the submodule name as-is, without munging it)
+	 * then return that.
+	 */
+	if (!access(buf->buf, F_OK))
+		return;
+
+	strbuf_setlen(buf, modules_len);
+	strbuf_addstr_urlencode(buf, submodule_name, 1);
 }
