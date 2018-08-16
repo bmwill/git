@@ -1351,6 +1351,16 @@ test_expect_success 'resolve submodule gitdir in superprojects modules directory
 	$(git -C superproject rev-parse --git-common-dir)/modules/sub/module
 	EOF
 	git -C superproject submodule--helper gitdir "sub/module" >actual &&
+	test_cmp expect actual &&
+
+	# Test using "submodule.<name>.gitdirpath" config for where the submodules
+	# gitdir is located inside the superprojecs "modules" directory
+	mv superproject/.git/modules/sub/module superproject/.git/modules/submodule &&
+	cat >expect <<-EOF &&
+	$(git -C superproject rev-parse --git-common-dir)/modules/submodule
+	EOF
+	git -C superproject config "submodule.sub/module.gitdirpath" "submodule" &&
+	git -C superproject submodule--helper gitdir "sub/module" >actual &&
 	test_cmp expect actual
 '
 

@@ -1966,16 +1966,27 @@ void submodule_name_to_gitdir(struct strbuf *buf, struct repository *r,
 			      const char *submodule_name)
 {
 	size_t modules_len;
+	char *key;
+	char *gitdir_path;
 
 	strbuf_git_common_path(buf, r, "modules/");
 	modules_len = buf->len;
-	strbuf_addstr(buf, submodule_name);
+
+	key = xstrfmt("submodule.%s.gitdirpath", submodule_name);
+	if (!repo_config_get_string(r, key, &gitdir_path)) {
+		strbuf_addstr(buf, gitdir_path);
+		free(key);
+		free(gitdir_path);
+		return;
+	}
+	free(key);
 
 	/*
 	 * If the submodule gitdir already exists using the old-fashioned
 	 * location (which uses the submodule name as-is, without munging it)
 	 * then return that.
 	 */
+	strbuf_addstr(buf, submodule_name);
 	if (!access(buf->buf, F_OK))
 		return;
 
